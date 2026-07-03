@@ -1,4 +1,5 @@
 import os
+import re
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,57 @@ class RemarkRequest(BaseModel):
     remark: str
 
 
+HINGLISH_WORDS = {
+    "hai", "hain", "ho", "raha", "rahi", "rahe", "hoga", "hogi", "kar", "karo",
+    "ki", "ka", "ke", "ko", "se", "par", "mein", "me", "aur", "ya", "nahi",
+    "log", "logon", "janata", "sadak", "road", "gaddha", "pani", "bijli",
+    "samasya", "dikkat", "pareshani", "shikayat", "kripya", "jaldi"
+}
+
+
+def detect_language_style(text: str) -> str:
+    if re.search(r"[\u0900-\u097F]", text):
+        return "Hindi"
+
+    words = re.findall(r"[A-Za-z]+", text.lower())
+    hinglish_hits = sum(1 for word in words if word in HINGLISH_WORDS)
+    if hinglish_hits >= 2:
+        return "Hinglish"
+
+    return "English"
+
+
+def clean_model_output(text: str) -> str:
+    text = (text or "").strip()
+    text = re.sub(r"^\s*(\*\*)?\s*(enhanced\s+remark|final\s+remark|output)\s*:?\s*(\*\*)?\s*", "", text, flags=re.I)
+    text = re.sub(r"^\s*[-:]+\s*", "", text)
+
+    stop_markers = [
+        "\n\nLanguage",
+        "\n\n**Language",
+        "\n\nTranslation",
+        "\n\n**Translation",
+        "\n\nNote:",
+        "\n\n**Note",
+        "\n\nChanges:",
+        "\n\n**Changes",
+        "\n\nPreservation",
+        "\n\n**Preservation",
+    ]
+    lowered = text.lower()
+    cut_at = len(text)
+    for marker in stop_markers:
+        index = lowered.find(marker.lower())
+        if index != -1:
+            cut_at = min(cut_at, index)
+    text = text[:cut_at].strip()
+
+    if text.startswith('"') and text.endswith('"'):
+        text = text[1:-1].strip()
+
+    return text
+
+
 def enhance_remark(raw_remark: str) -> str:
     raw_remark = (raw_remark or "").strip()
     if not raw_remark:
@@ -38,17 +90,20 @@ def enhance_remark(raw_remark: str) -> str:
     if client is None:
         raise RuntimeError("GROQ_API_KEY is not configured.")
 
+    language_style = detect_language_style(raw_remark)
     prompt = f"""You are an AI Remark Enhancement Agent for a Government Complaint Management System.
 
 Rewrite the given officer remark into a polished, professional, publication-ready official remark.
 
+Detected input language/style: {language_style}
+
 Language preservation rules:
-- Automatically detect the input language/style.
-- If the input is Hindi, return the enhanced remark in Hindi only.
-- If the input is English, return the enhanced remark in English only.
-- If the input is Hinglish or mixed Hindi-English, return the enhanced remark in the same Hinglish/mixed style only.
+- You must return the output in exactly this detected language/style: {language_style}.
+- If detected style is Hindi, return Hindi in Devanagari script only.
+- If detected style is English, return English only.
+- If detected style is Hinglish, return Hinglish in Latin/Roman script only.
 - Do not translate the remark into another language unless the user explicitly asks for translation.
-- Preserve the original script as much as possible. Do not convert Hindi to English or English to Hindi.
+- Do not convert Hindi to English, English to Hindi, or Hinglish to Devanagari.
 
 Content rules:
 - Preserve the exact meaning and intent.
@@ -58,7 +113,7 @@ Content rules:
 - Improve clarity, readability, flow, and official tone.
 - Keep names, complaint numbers, dates, departments, locations, and technical terms unchanged.
 - Return only the final enhanced remark.
-- Do not write labels, explanations, introductions, confirmations, or phrases such as "The remark has been rewritten".
+- Do not write labels, markdown, explanations, introductions, confirmations, notes, translations, or phrases such as "Enhanced Remark" or "The remark has been rewritten".
 
 Remark:
 {raw_remark}"""
@@ -66,9 +121,9 @@ Remark:
     completion = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
+        temperature=0.1,
     )
-    return completion.choices[0].message.content.strip()
+    return clean_model_output(completion.choices[0].message.content)
 
 
 @app.get("/api/health")
