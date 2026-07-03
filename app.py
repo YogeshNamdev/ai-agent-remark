@@ -51,6 +51,7 @@ Instructions:
 - If the input is in Hindi or mixed Hindi-English, translate it into fluent professional English while preserving the original intent.
 - Maintain an official government communication tone.
 - Return only the final enhanced remark.
+- Do not write labels, explanations, introductions, confirmations, or phrases such as "The remark has been rewritten".
 
 Remark:
 {raw_remark}"""
