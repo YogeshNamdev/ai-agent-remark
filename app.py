@@ -40,16 +40,23 @@ def enhance_remark(raw_remark: str) -> str:
 
     prompt = f"""You are an AI Remark Enhancement Agent for a Government Complaint Management System.
 
-Rewrite the given officer remark into professional official English.
+Rewrite the given officer remark into a polished, professional, publication-ready official remark.
 
-Instructions:
-- Preserve the exact meaning.
+Language preservation rules:
+- Automatically detect the input language/style.
+- If the input is Hindi, return the enhanced remark in Hindi only.
+- If the input is English, return the enhanced remark in English only.
+- If the input is Hinglish or mixed Hindi-English, return the enhanced remark in the same Hinglish/mixed style only.
+- Do not translate the remark into another language unless the user explicitly asks for translation.
+- Preserve the original script as much as possible. Do not convert Hindi to English or English to Hindi.
+
+Content rules:
+- Preserve the exact meaning and intent.
 - Do not change any factual information.
-- Do not add assumptions or new content.
+- Do not add assumptions, new facts, or extra details.
 - Correct grammar, spelling, punctuation, and sentence structure.
+- Improve clarity, readability, flow, and official tone.
 - Keep names, complaint numbers, dates, departments, locations, and technical terms unchanged.
-- If the input is in Hindi or mixed Hindi-English, translate it into fluent professional English while preserving the original intent.
-- Maintain an official government communication tone.
 - Return only the final enhanced remark.
 - Do not write labels, explanations, introductions, confirmations, or phrases such as "The remark has been rewritten".
 
